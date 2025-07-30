@@ -1,30 +1,43 @@
+import crypto from 'crypto';
 import readline from 'readline';
-import { FairRandomGenerator } from './FairRandomGenerator.js';
 
 export class CollaborativeRandom {
     constructor(range) {
+        if (!Number.isInteger(range) || range <= 0) {
+            throw new Error('Range must be a positive integer.');
+        }
         this.range = range;
+
+        // Securely generate random number
+        this.key = crypto.randomBytes(32); // 256-bit key
+        this.computerNumber = this.generateNumber(); // Secure number between 0..(range - 1)
+        this.hmac = this.computeHMAC(this.computerNumber);
     }
 
     async runProtocol(phaseName) {
-        console.log(`\n Fair number generation for ${phaseName}:`);
-        const fairGen = new FairRandomGenerator(this.range);
+        console.log(`\nFair number generation for ${phaseName}:`);
+        console.log(`I selected a random value in the range 0..${this.range - 1} (HMAC=${this.hmac}).`);
 
-        // Step 1: Show HMAC
-        console.log(`I selected a random value in the range 0..${this.range - 1} (HMAC=${fairGen.getHMAC()}).`);
-
-        // Step 2: Ask user for their number
         const userInput = await this.askUserNumber();
 
-        // Step 3: Reveal result
-        const compNum = fairGen.getComputerNumber();
-        const keyHex = fairGen.getKeyHex();
-
-        const result = (userInput + compNum) % this.range;
-        console.log(`My number is ${compNum} (KEY=${keyHex}).`);
-        console.log(`The fair number generation result is ${compNum} + ${userInput} = ${result} (mod ${this.range}).`);
-
+        const result = (userInput + this.computerNumber) % this.range;
+        console.log(`My number is ${this.computerNumber} (KEY=${this.key.toString('hex')}).`);
+        console.log(`The fair number generation result is ${this.computerNumber} + ${userInput} = ${result} (mod ${this.range}).`);
         return result;
+    }
+
+    generateNumber() {
+        let byte;
+        do {
+            byte = crypto.randomBytes(1)[0]; // 0-255
+        } while (byte >= Math.floor(256 / this.range) * this.range);
+        return byte % this.range;
+    }
+
+    computeHMAC(value) {
+        const hmac = crypto.createHmac('sha3-256', this.key);
+        hmac.update(value.toString());
+        return hmac.digest('hex');
     }
 
     askUserNumber() {
@@ -36,13 +49,14 @@ export class CollaborativeRandom {
         const prompt = () => {
             return new Promise((resolve) => {
                 rl.question(this.getPromptText(), (input) => {
-                    input = input.trim();
-                    if (input.toUpperCase() === 'X') {
-                        console.log('Exiting...');
+                    input = input.trim().toUpperCase();
+
+                    if (input === 'X') {
+                        console.log('👋 Exiting...');
                         process.exit(0);
                     } else if (input === '?') {
-                        console.log('Please enter a number between 0 and', this.range - 1);
-                        return resolve(prompt()); // re-ask
+                        console.log('ℹPlease enter a number between 0 and', this.range - 1);
+                        return resolve(prompt());
                     }
 
                     const num = parseInt(input);
@@ -61,7 +75,7 @@ export class CollaborativeRandom {
     }
 
     getPromptText() {
-        let text = 'Add your number modulo ' + this.range + ':\n';
+        let text = `Add your number modulo ${this.range}:\n`;
         for (let i = 0; i < this.range; i++) {
             text += `${i} - ${i}\n`;
         }
