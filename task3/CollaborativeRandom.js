@@ -6,11 +6,18 @@ export class CollaborativeRandom {
         if (!Number.isInteger(range) || range <= 0) {
             throw new Error('Range must be a positive integer.');
         }
+
         this.range = range;
 
-        // Securely generate random number
+
         this.key = crypto.randomBytes(32); // 256-bit key
-        this.computerNumber = this.generateNumber(); // Secure number between 0..(range - 1)
+
+        let byte;
+        do {
+            byte = crypto.randomBytes(1)[0]; // 0-255
+        } while (byte >= Math.floor(256 / this.range) * this.range);
+
+        this.computerNumber = byte % this.range;
         this.hmac = this.computeHMAC(this.computerNumber);
     }
 
@@ -24,14 +31,6 @@ export class CollaborativeRandom {
         console.log(`My number is ${this.computerNumber} (KEY=${this.key.toString('hex')}).`);
         console.log(`The fair number generation result is ${this.computerNumber} + ${userInput} = ${result} (mod ${this.range}).`);
         return result;
-    }
-
-    generateNumber() {
-        let byte;
-        do {
-            byte = crypto.randomBytes(1)[0]; // 0-255
-        } while (byte >= Math.floor(256 / this.range) * this.range);
-        return byte % this.range;
     }
 
     computeHMAC(value) {
@@ -55,7 +54,7 @@ export class CollaborativeRandom {
                         console.log('👋 Exiting...');
                         process.exit(0);
                     } else if (input === '?') {
-                        console.log('ℹPlease enter a number between 0 and', this.range - 1);
+                        console.log('ℹ Please enter a number between 0 and', this.range - 1);
                         return resolve(prompt());
                     }
 
